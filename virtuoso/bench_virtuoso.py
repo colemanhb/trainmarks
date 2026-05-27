@@ -156,6 +156,12 @@ def start_virtuoso(scale):
         "-e", f"VIRT_Parameters_NumberOfBuffers={num_buffers}",
         "-e", f"VIRT_Parameters_MaxDirtyBuffers={max_dirty}",
         "-e", "VIRT_Parameters_DirsAllowed=., /data, /opt/virtuoso-opensource/vad",
+        # Remove SPARQL execution limits so large queries complete
+        "-e", "VIRT_SPARQL_ResultSetMaxRows=0",
+        "-e", "VIRT_SPARQL_MaxQueryExecutionTime=300",
+        "-e", "VIRT_SPARQL_MaxQueryCostEstimationTime=0",
+        "-e", "VIRT_Parameters_MaxVectorSize=1000000",
+        "-e", "VIRT_SPARQL_DefaultQuery=",
         "-v", f"{os.path.abspath(DATA_DIR)}:/data",
         VIRTUOSO_IMAGE,
     ], timeout=60)
@@ -171,6 +177,13 @@ def start_virtuoso(scale):
         rc, stdout, _ = isql("SELECT 1;", timeout=5)
         if rc == 0 and "1" in stdout:
             print(f"  Virtuoso ready (took {attempt + 1}s)")
+            # Remove SPARQL execution limits so queries on large datasets complete
+            isql("SPARQL DEFINE sql:big-data-const 0;", timeout=10)
+            isql("DB.DBA.RDF_OBJ_FT_RULE_ADD(null, null, 'All');", timeout=10)
+            # Set execution limits via registry (more reliable than env vars)
+            isql("registry_set('SPARQL_RESULT_SET_MAX_ROWS', '0');", timeout=10)
+            isql("registry_set('__sparql_max_execution_time', '300');", timeout=10)
+            print("  SPARQL limits configured (no row limit, 300s timeout)")
             return True
 
     print("  Virtuoso did not become ready within 60 seconds")
@@ -213,18 +226,61 @@ def bulk_load(data_file, input_format="turtle"):
     return True
 
 
+def _is_construct(query_text):
+    """Check if a SPARQL query is a CONSTRUCT query."""
+    return any(line.strip().upper().startswith("CONSTRUCT") for line in query_text.split("\n"))
+
+
+def _is_update(query_text):
+    """Check if a SPARQL query is an UPDATE (DELETE/INSERT) query."""
+    for line in query_text.split("\n"):
+        stripped = line.strip().upper()
+        if stripped.startswith("DELETE") or stripped.startswith("INSERT"):
+            return True
+    return False
+
+
 def sparql_query(query_text):
     """Execute a SPARQL query against the running Virtuoso endpoint."""
     endpoint = f"http://localhost:{VIRTUOSO_HTTP_PORT}/sparql"
+    fmt = "text/turtle" if _is_construct(query_text) else "application/sparql-results+json"
     params = urllib.parse.urlencode({
         "query": query_text,
         "default-graph-uri": GRAPH_IRI,
-        "format": "application/sparql-results+json",
+        "format": fmt,
     }).encode("utf-8")
 
     req = urllib.request.Request(endpoint, data=params)
     with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
-        return json.loads(resp.read().decode("utf-8"))
+        body = resp.read().decode("utf-8")
+        if _is_construct(query_text):
+            # Validate: a real CONSTRUCT result should have at least some triples
+            if len(body.strip()) < 50:
+                raise RuntimeError(f"CONSTRUCT returned suspiciously small result ({len(body)} bytes): {body[:200]}")
+            return body
+        result = json.loads(body)
+        # Validate: check for Virtuoso error messages in the response
+        if "boolean" not in result and "results" in result:
+            bindings = result.get("results", {}).get("bindings", [])
+            if len(bindings) == 0:
+                print(f"    WARNING: query returned 0 results — may indicate a Virtuoso limit or error")
+        return result
+
+
+def sparql_update(query_text):
+    """Execute a SPARQL Update (DELETE/INSERT) against the running Virtuoso endpoint."""
+    endpoint = f"http://localhost:{VIRTUOSO_HTTP_PORT}/sparql"
+    params = urllib.parse.urlencode({
+        "update": query_text,
+        "default-graph-uri": GRAPH_IRI,
+    }).encode("utf-8")
+
+    req = urllib.request.Request(endpoint, data=params)
+    req.add_header("Content-Type", "application/x-www-form-urlencoded")
+
+    with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
+        body = resp.read().decode("utf-8")
+        return body
 
 
 def bench_io(scale, ttl_path, nt_path):
@@ -291,26 +347,31 @@ def bench_queries(server_ready, scale):
     """Benchmark SPARQL queries against the running Virtuoso endpoint."""
     if not server_ready:
         print(f"\n  Skipping queries ({scale}) — server not running")
-        for qname in ["q1_count", "q2_customer_orders", "q3_join_3_entities", "q4_optional_aggregation"]:
+        for qname in ["q1_count", "q2_customer_orders", "q3_join_3_entities", "q4_optional_aggregation", "q5_construct", "q6_delete_insert"]:
             RESULTS.append({"framework": "virtuoso", "scale": scale, "operation": f"query_{qname}", "seconds": "TIMEOUT"})
+            RESULTS.append({"framework": "virtuoso", "scale": scale, "operation": f"query_{qname}_cold", "seconds": "TIMEOUT"})
         return
 
     print(f"\n  SPARQL queries ({scale}):")
 
-    for qname in ["q1_count", "q2_customer_orders", "q3_join_3_entities", "q4_optional_aggregation"]:
+    for qname in ["q1_count", "q2_customer_orders", "q3_join_3_entities", "q4_optional_aggregation", "q5_construct", "q6_delete_insert"]:
         q = load_query(qname)
+        is_update = _is_update(q)
+        exec_fn = sparql_update if is_update else sparql_query
 
-        # Warmup run
-        _, t_warmup = timed(f"  {qname} (warmup)", lambda q=q: sparql_query(q), warmup=True)
+        # Warmup run (also recorded as cold timing)
+        _, t_warmup = timed(f"  {qname} (warmup)", lambda q=q: exec_fn(q), warmup=True)
         if t_warmup is None:
             print(f"    {qname}: TIMEOUT")
             RESULTS.append({"framework": "virtuoso", "scale": scale, "operation": f"query_{qname}", "seconds": "TIMEOUT"})
+            RESULTS.append({"framework": "virtuoso", "scale": scale, "operation": f"query_{qname}_cold", "seconds": "TIMEOUT"})
             continue
+        RESULTS.append({"framework": "virtuoso", "scale": scale, "operation": f"query_{qname}_cold", "seconds": t_warmup})
 
         # Best of 3
         times = []
         for _ in range(3):
-            _, t = timed(f"  {qname}", lambda q=q: sparql_query(q), warmup=True)
+            _, t = timed(f"  {qname}", lambda q=q: exec_fn(q), warmup=True)
             if t is not None:
                 times.append(t)
         if times:

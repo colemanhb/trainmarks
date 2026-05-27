@@ -114,20 +114,30 @@ def bench_queries(store, scale):
         return
     print(f"\n  SPARQL queries ({scale}):")
 
-    for qname in ["q1_count", "q2_customer_orders", "q3_join_3_entities", "q4_optional_aggregation"]:
+    for qname in ["q1_count", "q2_customer_orders", "q3_join_3_entities", "q4_optional_aggregation", "q5_construct", "q6_delete_insert"]:
         q = load_query(qname)
+        is_update = any(line.strip().upper().startswith("DELETE") or line.strip().upper().startswith("INSERT")
+                        for line in q.split("\n") if not line.strip().upper().startswith("PREFIX"))
 
-        # Warmup
-        _, t_warmup = timed(f"  {qname} (warmup)", lambda: list(store.query(q)), warmup=True)
+        def run_q(query=q, update=is_update):
+            if update:
+                return store.update(query)
+            else:
+                return list(store.query(query))
+
+        # Warmup (also recorded as cold timing)
+        _, t_warmup = timed(f"  {qname} (warmup)", run_q, warmup=True)
         if t_warmup is None:
             print(f"    {qname}: TIMEOUT")
             RESULTS.append({"framework": "oxigraph", "scale": scale, "operation": f"query_{qname}", "seconds": "TIMEOUT"})
+            RESULTS.append({"framework": "oxigraph", "scale": scale, "operation": f"query_{qname}_cold", "seconds": "TIMEOUT"})
             continue
+        RESULTS.append({"framework": "oxigraph", "scale": scale, "operation": f"query_{qname}_cold", "seconds": t_warmup})
 
         # Best of 3
         times = []
         for _ in range(3):
-            _, t = timed(f"  {qname}", lambda: list(store.query(q)), warmup=True)
+            _, t = timed(f"  {qname}", run_q, warmup=True)
             if t is not None:
                 times.append(t)
         if times:

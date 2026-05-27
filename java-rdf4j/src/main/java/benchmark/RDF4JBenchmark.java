@@ -5,8 +5,12 @@ import com.google.gson.GsonBuilder;
 import org.eclipse.rdf4j.model.Model;
 import org.eclipse.rdf4j.model.Statement;
 import org.eclipse.rdf4j.query.BindingSet;
+import org.eclipse.rdf4j.query.GraphQuery;
+import org.eclipse.rdf4j.query.GraphQueryResult;
 import org.eclipse.rdf4j.query.TupleQuery;
 import org.eclipse.rdf4j.query.TupleQueryResult;
+import org.eclipse.rdf4j.query.QueryLanguage;
+import org.eclipse.rdf4j.query.Update;
 import org.eclipse.rdf4j.repository.Repository;
 import org.eclipse.rdf4j.repository.RepositoryConnection;
 import org.eclipse.rdf4j.repository.sail.SailRepository;
@@ -109,21 +113,33 @@ public class RDF4JBenchmark {
 
         // --- SPARQL Queries ---
         System.out.println("\n  SPARQL queries (" + scale + "):");
-        for (String qname : new String[]{"q1_count", "q2_customer_orders", "q3_join_3_entities", "q4_optional_aggregation"}) {
+        for (String qname : new String[]{"q1_count", "q2_customer_orders", "q3_join_3_entities", "q4_optional_aggregation", "q5_construct", "q6_delete_insert"}) {
             String sparql = Files.readString(Path.of(queryDir + "/" + qname + ".rq"));
+            boolean isUpdate = isUpdateQuery(sparql);
 
-            // Warmup
-            execQuery(connQ, sparql);
+            // Warmup (also recorded as cold timing)
+            t0 = System.nanoTime();
+            if (isUpdate) {
+                execUpdate(connQ, sparql);
+            } else {
+                execQuery(connQ, sparql);
+            }
+            double coldTime = (System.nanoTime() - t0) / 1e9;
+            addResult("rdf4j", scale, "query_" + qname + "_cold", coldTime);
 
             // Best of 3
             double best = Double.MAX_VALUE;
             for (int i = 0; i < 3; i++) {
                 t0 = System.nanoTime();
-                execQuery(connQ, sparql);
+                if (isUpdate) {
+                    execUpdate(connQ, sparql);
+                } else {
+                    execQuery(connQ, sparql);
+                }
                 double elapsed = (System.nanoTime() - t0) / 1e9;
                 best = Math.min(best, elapsed);
             }
-            System.out.printf("    %s: %.4fs (best of 3)%n", qname, best);
+            System.out.printf("    %s: %.4fs (best of 3), cold: %.4fs%n", qname, best, coldTime);
             addResult("rdf4j", scale, "query_" + qname, best);
         }
 
@@ -131,10 +147,33 @@ public class RDF4JBenchmark {
         repoQ.shutDown();
     }
 
+    static boolean isUpdateQuery(String sparql) {
+        for (String line : sparql.split("\n")) {
+            String trimmed = line.trim().toUpperCase();
+            if (trimmed.startsWith("PREFIX") || trimmed.isEmpty()) continue;
+            return trimmed.startsWith("DELETE") || trimmed.startsWith("INSERT");
+        }
+        return false;
+    }
+
+    static void execUpdate(RepositoryConnection conn, String sparql) {
+        Update update = conn.prepareUpdate(QueryLanguage.SPARQL, sparql);
+        update.execute();
+    }
+
     static void execQuery(RepositoryConnection conn, String sparql) {
-        TupleQuery query = conn.prepareTupleQuery(sparql);
-        try (TupleQueryResult result = query.evaluate()) {
-            while (result.hasNext()) result.next(); // consume results
+        boolean isConstruct = sparql.stripLeading().toUpperCase().startsWith("CONSTRUCT") ||
+                sparql.lines().anyMatch(l -> l.stripLeading().toUpperCase().startsWith("CONSTRUCT"));
+        if (isConstruct) {
+            GraphQuery query = conn.prepareGraphQuery(QueryLanguage.SPARQL, sparql);
+            try (GraphQueryResult result = query.evaluate()) {
+                while (result.hasNext()) result.next(); // consume results
+            }
+        } else {
+            TupleQuery query = conn.prepareTupleQuery(sparql);
+            try (TupleQueryResult result = query.evaluate()) {
+                while (result.hasNext()) result.next(); // consume results
+            }
         }
     }
 

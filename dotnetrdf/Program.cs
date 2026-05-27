@@ -3,6 +3,7 @@ using System.Text.Json;
 using VDS.RDF;
 using VDS.RDF.Parsing;
 using VDS.RDF.Query;
+using VDS.RDF.Update;
 using VDS.RDF.Writing;
 
 const int TIMEOUT_MS = 300_000; // 5 minutes
@@ -157,8 +158,9 @@ foreach (var scale in scales)
         {
             Console.WriteLine($"\n  SPARQL queries ({scale}):");
             var processor = new LeviathanQueryProcessor(queryStore);
+            var updateProcessor = new LeviathanUpdateProcessor(queryStore);
 
-            string[] queryNames = ["q1_count", "q2_customer_orders", "q3_join_3_entities", "q4_optional_aggregation"];
+            string[] queryNames = ["q1_count", "q2_customer_orders", "q3_join_3_entities", "q4_optional_aggregation", "q5_construct", "q6_delete_insert"];
             foreach (var qname in queryNames)
             {
                 var queryPath = Path.Combine(queriesDir, $"{qname}.rq");
@@ -168,54 +170,118 @@ foreach (var scale in scales)
                     continue;
                 }
                 var queryText = File.ReadAllText(queryPath);
-                var sparqlParser = new SparqlQueryParser();
-                var query = sparqlParser.ParseFromString(queryText);
 
-                // Warmup
-                try
-                {
-                    processor.ProcessQuery(query);
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"    {qname}: warmup failed — {ex.Message}");
-                    RecordResult($"query_{qname}", scale, null);
-                    continue;
-                }
+                // Detect if this is a SPARQL Update (DELETE/INSERT) query
+                bool isUpdate = queryText.Split('\n').Any(line =>
+                    line.TrimStart().StartsWith("DELETE", StringComparison.OrdinalIgnoreCase) ||
+                    line.TrimStart().StartsWith("INSERT", StringComparison.OrdinalIgnoreCase));
 
-                // Best of 3
-                var times = new List<double>();
-                for (int i = 0; i < QUERY_RUNS; i++)
+                if (isUpdate)
                 {
-                    var t = TimedOp($"  {qname}", () =>
+                    // Use SparqlUpdateParser + LeviathanUpdateProcessor for UPDATE queries
+                    var updateParser = new SparqlUpdateParser();
+
+                    // Warmup (also recorded as cold timing)
+                    try
                     {
-                        // Re-parse the query for each run (dotNetRDF modifies the query object)
-                        var q = sparqlParser.ParseFromString(queryText);
-                        processor.ProcessQuery(q);
-                    }, silent: true);
-                    if (t.HasValue) times.Add(t.Value);
-                }
+                        var coldTime = TimedOp($"  {qname} (cold)", () =>
+                        {
+                            var cmds = updateParser.ParseFromString(queryText);
+                            updateProcessor.ProcessCommandSet(cmds);
+                        }, silent: true);
+                        RecordResult($"query_{qname}_cold", scale, coldTime);
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"    {qname}: warmup failed — {ex.Message}");
+                        RecordResult($"query_{qname}", scale, null);
+                        RecordResult($"query_{qname}_cold", scale, null);
+                        continue;
+                    }
 
-                if (times.Count > 0)
-                {
-                    var best = times.Min();
-                    Console.WriteLine($"    {qname}: {best:F4}s (best of {QUERY_RUNS})");
-                    RecordResult($"query_{qname}", scale, best);
+                    // Best of 3
+                    var updateTimes = new List<double>();
+                    for (int i = 0; i < QUERY_RUNS; i++)
+                    {
+                        var t = TimedOp($"  {qname}", () =>
+                        {
+                            var cmds = updateParser.ParseFromString(queryText);
+                            updateProcessor.ProcessCommandSet(cmds);
+                        }, silent: true);
+                        if (t.HasValue) updateTimes.Add(t.Value);
+                    }
+
+                    if (updateTimes.Count > 0)
+                    {
+                        var best = updateTimes.Min();
+                        Console.WriteLine($"    {qname}: {best:F4}s (best of {QUERY_RUNS})");
+                        RecordResult($"query_{qname}", scale, best);
+                    }
+                    else
+                    {
+                        Console.WriteLine($"    {qname}: TIMEOUT");
+                        RecordResult($"query_{qname}", scale, null);
+                    }
                 }
                 else
                 {
-                    Console.WriteLine($"    {qname}: TIMEOUT");
-                    RecordResult($"query_{qname}", scale, null);
+                    // Standard SPARQL query (SELECT/CONSTRUCT)
+                    var sparqlParser = new SparqlQueryParser();
+                    var query = sparqlParser.ParseFromString(queryText);
+
+                    // Warmup (also recorded as cold timing)
+                    try
+                    {
+                        var coldTime = TimedOp($"  {qname} (cold)", () =>
+                        {
+                            var q = sparqlParser.ParseFromString(queryText);
+                            processor.ProcessQuery(q);
+                        }, silent: true);
+                        RecordResult($"query_{qname}_cold", scale, coldTime);
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"    {qname}: warmup failed — {ex.Message}");
+                        RecordResult($"query_{qname}", scale, null);
+                        RecordResult($"query_{qname}_cold", scale, null);
+                        continue;
+                    }
+
+                    // Best of 3
+                    var times = new List<double>();
+                    for (int i = 0; i < QUERY_RUNS; i++)
+                    {
+                        var t = TimedOp($"  {qname}", () =>
+                        {
+                            // Re-parse the query for each run (dotNetRDF modifies the query object)
+                            var q = sparqlParser.ParseFromString(queryText);
+                            processor.ProcessQuery(q);
+                        }, silent: true);
+                        if (t.HasValue) times.Add(t.Value);
+                    }
+
+                    if (times.Count > 0)
+                    {
+                        var best = times.Min();
+                        Console.WriteLine($"    {qname}: {best:F4}s (best of {QUERY_RUNS})");
+                        RecordResult($"query_{qname}", scale, best);
+                    }
+                    else
+                    {
+                        Console.WriteLine($"    {qname}: TIMEOUT");
+                        RecordResult($"query_{qname}", scale, null);
+                    }
                 }
             }
         }
         else
         {
             Console.WriteLine($"\n  Skipping SPARQL queries ({scale}) — no valid data loaded");
-            string[] queryNames = ["q1_count", "q2_customer_orders", "q3_join_3_entities", "q4_optional_aggregation"];
+            string[] queryNames = ["q1_count", "q2_customer_orders", "q3_join_3_entities", "q4_optional_aggregation", "q5_construct", "q6_delete_insert"];
             foreach (var qname in queryNames)
             {
                 RecordResult($"query_{qname}", scale, null);
+                RecordResult($"query_{qname}_cold", scale, null);
             }
         }
 

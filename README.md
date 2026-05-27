@@ -1,6 +1,6 @@
 # RDF Framework Benchmark
 
-A reproducible benchmark comparing eleven RDF frameworks and triplestores on I/O performance (read/write Turtle and N-Triples) and SPARQL query performance across three dataset scales (100K, 1M, and 10M triples).
+A reproducible benchmark comparing thirteen RDF frameworks and triplestores on I/O performance (read/write Turtle and N-Triples) and SPARQL query performance across three dataset scales (100K, 1M, and 10M triples).
 
 **Results:** Open `benchmark.html` in a browser to view the interactive report with charts, framework filters, preset groups, and expandable query details.
 
@@ -19,6 +19,8 @@ A reproducible benchmark comparing eleven RDF frameworks and triplestores on I/O
 | GraphDB | Java (Docker) | RDF4J-based, on-disk persistence | 10.8.0 | Proprietary (free tier) |
 | dotNetRDF | C# (Docker) | In-memory TripleStore | 3.5.1 | MIT |
 | Neo4j + n10s | Java (Docker) | Native property graph + RDF import | 5.26 + n10s 5.26.0 | GPL v3 (Community) |
+| Blazegraph | Java (Docker) | In-memory / RWStore journal | 2.1.5 | GPL v2 |
+| Comunica | TypeScript (Node.js) | Client-side query engine over files | latest | MIT |
 
 ## Prerequisites
 
@@ -30,7 +32,7 @@ A reproducible benchmark comparing eleven RDF frameworks and triplestores on I/O
 - Java 11+
 - Maven 3.8+
 
-**Docker-based frameworks (QLever, Virtuoso, GraphDB, dotNetRDF, Neo4j):**
+**Docker-based frameworks (QLever, Virtuoso, GraphDB, dotNetRDF, Neo4j, Blazegraph):**
 - Docker Desktop installed and running
 - Images are pulled automatically by each benchmark script, or manually:
   ```bash
@@ -39,7 +41,12 @@ A reproducible benchmark comparing eleven RDF frameworks and triplestores on I/O
   docker pull ontotext/graphdb:10.8.0
   docker pull mcr.microsoft.com/dotnet/sdk:8.0
   docker pull neo4j:5.26-community
+  docker pull lyrasis/blazegraph:2.1.5
   ```
+
+**Comunica (Node.js):**
+- Node.js 18+
+- `npm install -g @comunica/query-sparql-file`
 
 ## Directory structure
 
@@ -49,7 +56,7 @@ rdf-benchmark/
 ├── benchmark.html         ← interactive results report
 ├── generate_data.py       ← synthetic data generator
 ├── data/                  ← generated .ttl and .nt files
-├── queries/               ← shared SPARQL query files (q1–q4)
+├── queries/               ← shared SPARQL query files (q1–q6)
 ├── results/               ← JSON output from each framework
 ├── python-maplib/         ← maplib benchmark
 ├── python-maplib-disk/    ← maplib disk-backed benchmark
@@ -61,7 +68,9 @@ rdf-benchmark/
 ├── virtuoso/              ← Virtuoso benchmark (Docker)
 ├── graphdb/               ← GraphDB benchmark (Docker)
 ├── dotnetrdf/             ← dotNetRDF benchmark (Docker)
-└── neo4j/                 ← Neo4j + n10s benchmark (Docker)
+├── neo4j/                 ← Neo4j + n10s benchmark (Docker)
+├── blazegraph/            ← Blazegraph benchmark (Docker)
+└── comunica/              ← Comunica benchmark (Node.js)
 ```
 
 ## Step 1: Generate test data
@@ -72,7 +81,7 @@ From the `rdf-benchmark/` root directory:
 python generate_data.py
 ```
 
-This creates Turtle (`.ttl`) and N-Triples (`.nt`) files in `data/` at three scales, plus four SPARQL query files in `queries/`:
+This creates Turtle (`.ttl`) and N-Triples (`.nt`) files in `data/` at three scales, plus six SPARQL query files in `queries/`:
 
 | Scale   | Triples | Turtle size | N-Triples size |
 |---------|---------|-------------|----------------|
@@ -121,6 +130,7 @@ cd virtuoso && python bench_virtuoso.py && cd ..
 cd graphdb && python bench_graphdb.py && cd ..
 cd dotnetrdf && python bench_dotnetrdf.py && cd ..
 cd neo4j && python bench_neo4j.py && cd ..
+cd blazegraph && python bench_blazegraph.py && cd ..
 ```
 
 **Notes on Docker benchmarks:**
@@ -129,6 +139,14 @@ cd neo4j && python bench_neo4j.py && cd ..
 - dotNetRDF builds a Docker image from source (Dockerfile + C# project)
 - dotNetRDF's xlarge (10M) fails with OOM — results are recorded as TIMEOUT
 - All Docker containers are cleaned up automatically after benchmarking
+
+### Comunica (Node.js)
+
+```bash
+cd comunica && python bench_comunica.py && cd ..
+```
+
+Comunica runs as a subprocess via `comunica-sparql-file`. Each query invocation includes Node.js startup overhead. I/O operations are not applicable (Comunica is a query engine, not a store).
 
 ## Step 3: View results
 
@@ -140,18 +158,21 @@ Open `benchmark.html` in any browser. The report includes:
 - **Log scale toggle** — useful when comparing frameworks with very different speeds
 - **Framework filters** — click chips to show/hide individual frameworks
 - **Preset groups** — All, In-memory, Disk/server, Python, Docker-based
+- **Cold timing toggle** — switch between warm (best of 3) and cold (first run, no warmup) query times
 - **Expandable query rows** — click any query name to see the full SPARQL
 
 ## SPARQL queries
 
-| ID | Description | Complexity |
-|----|-------------|------------|
-| Q1 | `COUNT` all triples | Full scan |
-| Q2 | Top 20 customers by spend (`GROUP BY` + `SUM` + `ORDER BY`) | Aggregation over joins |
-| Q3 | 3-entity join (customer + order + product) with country filter | Multi-pattern + filter |
-| Q4 | Revenue by country/segment with `OPTIONAL` orders | OPTIONAL + aggregation |
+| ID | Description | Type | Complexity |
+|----|-------------|------|------------|
+| Q1 | `COUNT` all triples | SELECT | Full scan |
+| Q2 | Top 20 customers by spend (`GROUP BY` + `SUM` + `ORDER BY`) | SELECT | Aggregation over joins |
+| Q3 | 3-entity join (customer + order + product) with country filter | SELECT | Multi-pattern + filter |
+| Q4 | Revenue by country/segment with `OPTIONAL` orders | SELECT | OPTIONAL + aggregation |
+| Q5 | Norwegian customer orders with product details | CONSTRUCT | Graph extraction via join |
+| Q6 | Adjust product prices by category (5 conditional branches) | UPDATE | DELETE-INSERT with BIND + nested IF |
 
-Neo4j uses equivalent Cypher translations of these queries rather than SPARQL.
+Neo4j uses equivalent Cypher translations of Q1–Q4 rather than SPARQL. Q5 (CONSTRUCT) has no Cypher equivalent. Q6 (SPARQL Update) is not supported by QLever (read-only), Neo4j (Cypher), or Comunica (query-only) — these are recorded as N/A.
 
 ## Methodology
 
@@ -159,7 +180,7 @@ All frameworks use the same data files and the same queries. Each operation has 
 
 **Timing:** Python uses `time.perf_counter()` with garbage collection between runs. Java uses `System.nanoTime()` with JVM warmup. Docker-based frameworks time the full operation including any HTTP round-trip.
 
-**Queries:** Best of 3 runs after a warmup run.
+**Queries:** Best of 3 runs after a warmup run. The warmup run is also recorded as the "cold" time (first execution with no cache or JIT warmup), togglable in the report.
 
 **I/O:** Single timed run (no averaging), since allocation overhead is part of the real-world cost.
 
@@ -176,4 +197,6 @@ All frameworks use the same data files and the same queries. Each operation has 
 - maplib reads use `parallel=True` for multi-threaded parsing.
 - maplib (disk) uses the proprietary `storage_folder` parameter. The in-memory maplib is fully open source under Apache 2.0.
 - dotNetRDF cannot handle xlarge (10M triples) within its 16 GB Docker memory limit.
-- Server-based Docker frameworks (QLever, Virtuoso, GraphDB, Neo4j) have query times that include ~0.5–1 ms of HTTP overhead. dotNetRDF runs in-process with no network overhead.
+- Server-based Docker frameworks (QLever, Virtuoso, GraphDB, Neo4j, Blazegraph) have query times that include ~0.5–1 ms of HTTP overhead. dotNetRDF runs in-process with no network overhead.
+- Comunica query times include Node.js process startup overhead (~0.5–1s) since each query runs as a subprocess.
+- Blazegraph is no longer actively maintained but remains widely deployed.

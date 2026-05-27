@@ -229,18 +229,42 @@ def start_server():
     return False
 
 
+def _is_construct(query_text):
+    """Check if a SPARQL query is a CONSTRUCT query."""
+    return any(line.strip().upper().startswith("CONSTRUCT") for line in query_text.split("\n"))
+
+
+def _is_update(query_text):
+    """Check if a SPARQL query is an UPDATE (DELETE/INSERT) query."""
+    for line in query_text.split("\n"):
+        stripped = line.strip().upper()
+        if stripped.startswith("DELETE") or stripped.startswith("INSERT"):
+            return True
+    return False
+
+
+# Queries that QLever cannot run (read-only engine, no SPARQL Update support)
+UPDATE_QUERIES = {"q6_delete_insert"}
+
+
 def sparql_query(query_text):
     """
     Execute a SPARQL query against the running QLever server.
-    Returns the JSON result.
+    Returns the JSON result (SELECT) or raw text (CONSTRUCT).
     """
     endpoint = f"http://localhost:{QLEVER_PORT}"
     data = urllib.parse.urlencode({"query": query_text}).encode("utf-8")
-    headers = {"Accept": "application/sparql-results+json"}
+    if _is_construct(query_text):
+        headers = {"Accept": "text/turtle"}
+    else:
+        headers = {"Accept": "application/sparql-results+json"}
 
     req = urllib.request.Request(endpoint, data=data, headers=headers)
     with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
-        return json.loads(resp.read().decode("utf-8"))
+        body = resp.read().decode("utf-8")
+        if _is_construct(query_text):
+            return body  # raw Turtle text
+        return json.loads(body)
 
 
 def bench_io(scale, ttl_path, nt_path):
@@ -309,20 +333,30 @@ def bench_queries(server_ready, scale):
     """Benchmark SPARQL queries against the running QLever server."""
     if not server_ready:
         print(f"\n  Skipping queries ({scale}) — server not running")
-        for qname in ["q1_count", "q2_customer_orders", "q3_join_3_entities", "q4_optional_aggregation"]:
+        for qname in ["q1_count", "q2_customer_orders", "q3_join_3_entities", "q4_optional_aggregation", "q5_construct", "q6_delete_insert"]:
             RESULTS.append({"framework": "qlever", "scale": scale, "operation": f"query_{qname}", "seconds": "TIMEOUT"})
+            RESULTS.append({"framework": "qlever", "scale": scale, "operation": f"query_{qname}_cold", "seconds": "TIMEOUT"})
         return
     print(f"\n  SPARQL queries ({scale}):")
 
-    for qname in ["q1_count", "q2_customer_orders", "q3_join_3_entities", "q4_optional_aggregation"]:
+    for qname in ["q1_count", "q2_customer_orders", "q3_join_3_entities", "q4_optional_aggregation", "q5_construct", "q6_delete_insert"]:
+        # Skip UPDATE queries — QLever is a read-only engine
+        if qname in UPDATE_QUERIES:
+            print(f"    {qname}: N/A (QLever is read-only, no SPARQL Update support)")
+            RESULTS.append({"framework": "qlever", "scale": scale, "operation": f"query_{qname}", "seconds": "N/A"})
+            RESULTS.append({"framework": "qlever", "scale": scale, "operation": f"query_{qname}_cold", "seconds": "N/A"})
+            continue
+
         q = load_query(qname)
 
-        # Warmup run
+        # Warmup run (also recorded as cold timing)
         _, t_warmup = timed(f"  {qname} (warmup)", lambda: sparql_query(q), warmup=True)
         if t_warmup is None:
             print(f"    {qname}: TIMEOUT")
             RESULTS.append({"framework": "qlever", "scale": scale, "operation": f"query_{qname}", "seconds": "TIMEOUT"})
+            RESULTS.append({"framework": "qlever", "scale": scale, "operation": f"query_{qname}_cold", "seconds": "TIMEOUT"})
             continue
+        RESULTS.append({"framework": "qlever", "scale": scale, "operation": f"query_{qname}_cold", "seconds": t_warmup})
 
         # Best of 3
         times = []

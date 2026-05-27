@@ -131,18 +131,33 @@ def bench_queries(m, scale):
         return
     print(f"\n  SPARQL queries ({scale}):")
 
-    for qname in ["q1_count", "q2_customer_orders", "q3_join_3_entities", "q4_optional_aggregation"]:
+    for qname in ["q1_count", "q2_customer_orders", "q3_join_3_entities", "q4_optional_aggregation", "q5_construct", "q6_delete_insert"]:
         q = load_query(qname)
-        # Warmup run
-        _, t_warmup = timed(f"  {qname} (warmup)", lambda: m.query(q, streaming=True), warmup=True)
+        is_construct = q.strip().upper().startswith("CONSTRUCT") or \
+                       any(line.strip().upper().startswith("CONSTRUCT") for line in q.split("\n"))
+        is_update = any(line.strip().upper().startswith("DELETE") or line.strip().upper().startswith("INSERT")
+                        for line in q.split("\n") if not line.strip().upper().startswith("PREFIX"))
+
+        def run_query(query=q, construct=is_construct, update=is_update):
+            if update:
+                return m.update(query)
+            elif construct:
+                return m.query(query)  # CONSTRUCT returns List[DataFrame]
+            else:
+                return m.query(query, streaming=True)
+
+        # Warmup run (also recorded as cold timing)
+        _, t_warmup = timed(f"  {qname} (warmup)", run_query, warmup=True)
         if t_warmup is None:
             print(f"    {qname}: TIMEOUT")
             RESULTS.append({"framework": "maplib_disk", "scale": scale, "operation": f"query_{qname}", "seconds": "TIMEOUT"})
+            RESULTS.append({"framework": "maplib_disk", "scale": scale, "operation": f"query_{qname}_cold", "seconds": "TIMEOUT"})
             continue
+        RESULTS.append({"framework": "maplib_disk", "scale": scale, "operation": f"query_{qname}_cold", "seconds": t_warmup})
         # Timed run (best of 3)
         times = []
         for _ in range(3):
-            _, t = timed(f"  {qname}", lambda: m.query(q, streaming=True), warmup=True)
+            _, t = timed(f"  {qname}", run_query, warmup=True)
             if t is not None:
                 times.append(t)
         if times:

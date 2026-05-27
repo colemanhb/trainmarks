@@ -344,19 +344,23 @@
     margin-bottom: 0.8rem;
   }
   .toggle-log {
-    font-size: 0.75rem;
-    padding: 0.3rem 0.7rem;
-    border: 1px solid var(--stone-300);
-    border-radius: 4px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    padding: 0.5rem 1.1rem;
+    border: 2px solid var(--stone-400);
+    border-radius: 6px;
     background: var(--white);
-    color: var(--stone-500);
+    color: var(--stone-600);
     cursor: pointer;
     transition: all 0.15s;
+    letter-spacing: 0.01em;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
   }
   .toggle-log:hover, .toggle-log.active {
     background: var(--forest-100);
-    border-color: var(--forest-400);
+    border-color: var(--forest-500);
     color: var(--forest-700);
+    box-shadow: 0 1px 4px rgba(0,0,0,0.12);
   }
 </style>
 </head>
@@ -440,7 +444,7 @@
 <!-- ════════════ SPARQL QUERIES ════════════ -->
 <section>
   <h2>SPARQL Queries</h2>
-  <p class="section-lead">Four queries of increasing complexity, representative of real analytical workloads. Click a row to see the SPARQL.</p>
+  <p class="section-lead">Six queries of increasing complexity, representative of real analytical workloads. Click a row to see the SPARQL.</p>
   <div class="card">
     <table id="sparql-table">
       <thead>
@@ -525,6 +529,61 @@
 <span class="kw">GROUP BY</span> <span class="var">?country</span> <span class="var">?segment</span>
 <span class="kw">ORDER BY</span> <span class="kw">DESC</span>(<span class="var">?revenue</span>)</div></td>
         </tr>
+
+        <tr class="query-row" onclick="toggleQuery('q5')">
+          <td><span class="expand-hint">&#9654;</span>Q5</td>
+          <td>CONSTRUCT subgraph of Norwegian customer orders with products</td>
+          <td>CONSTRUCT + multi-join</td>
+        </tr>
+        <tr class="query-detail" id="detail-q5">
+          <td colspan="3"><div class="query-code-wrap"><span class="kw">PREFIX</span> <span class="uri">:</span> <span class="uri">&lt;http://benchmark.example/&gt;</span>
+<span class="kw">PREFIX</span> <span class="uri">rdf:</span> <span class="uri">&lt;http://www.w3.org/1999/02/22-rdf-syntax-ns#&gt;</span>
+<span class="kw">PREFIX</span> <span class="uri">rdfs:</span> <span class="uri">&lt;http://www.w3.org/2000/01/rdf-schema#&gt;</span>
+
+<span class="kw">CONSTRUCT</span> {
+    <span class="var">?customer</span> <span class="uri">rdf:type</span> <span class="uri">:Customer</span> .
+    <span class="var">?customer</span> <span class="uri">rdfs:label</span> <span class="var">?name</span> .
+    <span class="var">?customer</span> <span class="uri">:country</span> <span class="uri">:Norway</span> .
+    <span class="var">?order</span> <span class="uri">:placedBy</span> <span class="var">?customer</span> .
+    <span class="var">?order</span> <span class="uri">:totalAmount</span> <span class="var">?amount</span> .
+    <span class="var">?order</span> <span class="uri">:contains</span> <span class="var">?product</span> .
+    <span class="var">?product</span> <span class="uri">rdfs:label</span> <span class="var">?productName</span> .
+}
+<span class="kw">WHERE</span> {
+    <span class="var">?customer</span> <span class="uri">rdf:type</span> <span class="uri">:Customer</span> ;
+              <span class="uri">rdfs:label</span> <span class="var">?name</span> ;
+              <span class="uri">:country</span> <span class="uri">:Norway</span> .
+    <span class="var">?order</span> <span class="uri">:placedBy</span> <span class="var">?customer</span> ;
+           <span class="uri">:totalAmount</span> <span class="var">?amount</span> ;
+           <span class="uri">:contains</span> <span class="var">?product</span> .
+    <span class="var">?product</span> <span class="uri">rdfs:label</span> <span class="var">?productName</span> .
+}</div></td>
+        </tr>
+        <tr class="query-row" onclick="toggleQuery('q6')">
+          <td><span class="expand-hint">&#9654;</span>Q6</td>
+          <td>DELETE-INSERT: adjust product prices by category (5 conditional branches)</td>
+          <td>SPARQL Update with BIND + nested IF</td>
+        </tr>
+        <tr class="query-detail" id="detail-q6">
+          <td colspan="3"><div class="query-code-wrap"><span class="kw">PREFIX</span> <span class="uri">:</span> <span class="uri">&lt;http://benchmark.example/&gt;</span>
+<span class="kw">PREFIX</span> <span class="uri">xsd:</span> <span class="uri">&lt;http://www.w3.org/2001/XMLSchema#&gt;</span>
+
+<span class="kw">DELETE</span> { <span class="var">?product</span> <span class="uri">:unitPrice</span> <span class="var">?oldPrice</span> }
+<span class="kw">INSERT</span> { <span class="var">?product</span> <span class="uri">:unitPrice</span> <span class="var">?newPrice</span> }
+<span class="kw">WHERE</span> {
+    <span class="var">?product</span> <span class="uri">a</span> <span class="uri">:Product</span> ;
+             <span class="uri">:unitPrice</span> <span class="var">?oldPrice</span> ;
+             <span class="uri">:category</span> <span class="var">?cat</span> .
+    <span class="kw">BIND</span>(
+        <span class="fn">IF</span>(<span class="var">?cat</span> = <span class="lit">"Software"</span>, <span class="var">?oldPrice</span> * <span class="lit">1.10</span>,
+        <span class="fn">IF</span>(<span class="var">?cat</span> = <span class="lit">"Hardware"</span>, <span class="var">?oldPrice</span> * <span class="lit">0.95</span>,
+        <span class="fn">IF</span>(<span class="var">?cat</span> = <span class="lit">"Services"</span>, <span class="var">?oldPrice</span> * <span class="lit">1.15</span>,
+        <span class="fn">IF</span>(<span class="var">?cat</span> = <span class="lit">"Accessories"</span>, <span class="var">?oldPrice</span> * <span class="lit">0.90</span>,
+        <span class="var">?oldPrice</span> * <span class="lit">1.05</span>))))
+        <span class="kw">AS</span> <span class="var">?newPrice</span>
+    )
+}</div></td>
+        </tr>
       </tbody>
     </table>
   </div>
@@ -586,6 +645,7 @@
 
   <div class="chart-controls">
     <button class="toggle-log" id="query-log-toggle" onclick="toggleQueryLog()">Log scale</button>
+    <button class="toggle-log" id="cold-toggle" onclick="toggleCold()">Warm (best of 3)</button>
   </div>
 
   <div class="chart-grid">
@@ -604,6 +664,14 @@
     <div class="chart-card">
       <h4>Q4: OPTIONAL + GROUP BY</h4>
       <div class="chart-wrap"><canvas id="chart-q4"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <h4>Q5: CONSTRUCT subgraph</h4>
+      <div class="chart-wrap"><canvas id="chart-q5"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <h4>Q6: DELETE-INSERT price adjustment</h4>
+      <div class="chart-wrap"><canvas id="chart-q6"></canvas></div>
     </div>
   </div>
 
@@ -628,6 +696,10 @@
       <h4>Q2 (Aggregation) across scales</h4>
       <div class="chart-wrap"><canvas id="chart-scale-q2"></canvas></div>
     </div>
+    <div class="chart-card">
+      <h4>Q5 (CONSTRUCT) across scales</h4>
+      <div class="chart-wrap"><canvas id="chart-scale-q5"></canvas></div>
+    </div>
   </div>
 </section>
 
@@ -645,156 +717,189 @@
 const DATA = {
   maplib: {
     medium: {
-      read_turtle: 0.14543, write_turtle: 0.10072, read_ntriples: 0.07224, write_ntriples: 0.01252,
-      q1: 0.00338, q2: 0.00192, q3: 0.00265, q4: 0.00331
+      read_turtle: 0.13945, write_turtle: 0.11176, read_ntriples: 0.07647, write_ntriples: 0.01261,
+      q1: 0.00221, q2: 0.00175, q3: 0.00323, q4: 0.00371, q5: 0.00952, q6: 0.0033,
+      q1_cold: 0.00368, q2_cold: 0.02028, q3_cold: 0.00436, q4_cold: 0.00835, q5_cold: 0.01012, q6_cold: 0.0111
     },
     large: {
-      read_turtle: 0.82245, write_turtle: 0.68412, read_ntriples: 0.78772, write_ntriples: 0.08303,
-      q1: 0.01076, q2: 0.0033, q3: 0.00636, q4: 0.00718
+      read_turtle: 0.802, write_turtle: 0.764, read_ntriples: 0.78568, write_ntriples: 0.07511,
+      q1: 0.01089, q2: 0.00394, q3: 0.00655, q4: 0.00798, q5: 0.01716, q6: 0.00517,
+      q1_cold: 0.01101, q2_cold: 0.00405, q3_cold: 0.00692, q4_cold: 0.00975, q5_cold: 0.01754, q6_cold: 0.0054
     },
     xlarge: {
-      read_turtle: 9.56067, write_turtle: 7.13345, read_ntriples: 9.6186, write_ntriples: 0.80806,
-      q1: 0.13192, q2: 0.01821, q3: 0.03751, q4: 0.04394
+      read_turtle: 9.26567, write_turtle: 7.52027, read_ntriples: 9.55677, write_ntriples: 0.67776,
+      q1: 0.0772, q2: 0.01848, q3: 0.04355, q4: 0.04732, q5: 0.07837, q6: 0.01921,
+      q1_cold: 0.07717, q2_cold: 0.02171, q3_cold: 0.04691, q4_cold: 0.04685, q5_cold: 0.08248, q6_cold: 0.02005
     },
   },
   oxigraph: {
     medium: {
-      read_turtle: 0.10977, write_turtle: 0.03139, read_ntriples: 0.09492, write_ntriples: 0.02877,
-      q1: 0.00808, q2: 0.01172, q3: 0.00214, q4: 0.01098
+      read_turtle: 0.12303, write_turtle: 0.02746, read_ntriples: 0.09658, write_ntriples: 0.027,
+      q1: 0.00718, q2: 0.01189, q3: 0.00195, q4: 0.00978, q5: 0.00375, q6: 0.00054,
+      q1_cold: 0.00799, q2_cold: 0.01293, q3_cold: 0.00247, q4_cold: 0.01162, q5_cold: 0.00457, q6_cold: 0.00074
     },
     large: {
-      read_turtle: 1.27039, write_turtle: 0.28424, read_ntriples: 1.17366, write_ntriples: 0.28622,
-      q1: 0.08209, q2: 0.14995, q3: 0.02942, q4: 0.15363
+      read_turtle: 1.26446, write_turtle: 0.28283, read_ntriples: 1.10038, write_ntriples: 0.2808,
+      q1: 0.07281, q2: 0.14914, q3: 0.02669, q4: 0.15693, q5: 0.05613, q6: 0.00555,
+      q1_cold: 0.07348, q2_cold: 0.15478, q3_cold: 0.03241, q4_cold: 0.15335, q5_cold: 0.06184, q6_cold: 0.00913
     },
     xlarge: {
-      read_turtle: 15.56925, write_turtle: 3.62357, read_ntriples: 17.43333, write_ntriples: 3.57707,
-      q1: 0.82599, q2: 2.13711, q3: 0.39483, q4: 1.74058
+      read_turtle: 14.58876, write_turtle: 3.14806, read_ntriples: 13.0633, write_ntriples: 3.14973,
+      q1: 0.7308, q2: 1.90191, q3: 0.35591, q4: 1.59786, q5: 0.67534, q6: 0.02868,
+      q1_cold: 0.74258, q2_cold: 1.95529, q3_cold: 0.3664, q4_cold: 1.66758, q5_cold: 0.71996, q6_cold: 0.04309
     },
   },
   rdflib: {
     medium: {
-      read_turtle: 2.02773, write_turtle: 1.21395, read_ntriples: 1.10911, write_ntriples: 0.18779,
-      q1: 0.39503, q2: 0.41319, q3: 0.1075, q4: 0.57301
+      read_turtle: 2.00214, write_turtle: 1.19897, read_ntriples: 1.08057, write_ntriples: 0.18253,
+      q1: 0.38756, q2: 0.40081, q3: 0.10437, q4: 0.56246, q5: 0.12377, q6: 0.07145,
+      q1_cold: 0.48079, q2_cold: 0.39956, q3_cold: 0.10447, q4_cold: 0.56058, q5_cold: 0.12391, q6_cold: 0.07358
     },
     large: {
-      read_turtle: 22.03491, write_turtle: 14.11939, read_ntriples: 12.39794, write_ntriples: 1.94148,
-      q1: 4.06017, q2: 4.33561, q3: 1.39598, q4: 5.93886
+      read_turtle: 21.17743, write_turtle: 13.6666, read_ntriples: 11.89511, write_ntriples: 1.87997,
+      q1: 3.91469, q2: 4.144, q3: 1.38525, q4: 5.86333, q5: 1.5405, q6: 0.83781,
+      q1_cold: 3.89828, q2_cold: 4.16752, q3_cold: 1.4013, q4_cold: 5.92636, q5_cold: 1.54875, q6_cold: 0.8405
     },
     xlarge: {
-      read_turtle: 225.84245, write_turtle: 158.35133, read_ntriples: 140.1179, write_ntriples: 21.71104,
-      q1: 42.42843, q2: 43.33409, q3: 15.42638, q4: 60.2934
+      read_turtle: 223.06808, write_turtle: 148.82861, read_ntriples: 127.47881, write_ntriples: 22.19023,
+      q1: 40.51324, q2: 42.61982, q3: 15.22097, q4: 59.2432, q5: 16.17115, q6: 7.39643,
+      q1_cold: 42.02066, q2_cold: 42.62022, q3_cold: 15.54657, q4_cold: 60.94605, q5_cold: 16.54637, q6_cold: 7.52504
     },
   },
   jena: {
     medium: {
-      read_turtle: 0.1698, write_turtle: 0.1303, read_ntriples: 0.1758, write_ntriples: 0.0847,
-      q1: 0.0189, q2: 0.0193, q3: 0.0066, q4: 0.0241
+      read_turtle: 0.1604, write_turtle: 0.1382, read_ntriples: 0.1923, write_ntriples: 0.0791,
+      q1: 0.0151, q2: 0.0393, q3: 0.0066, q4: 0.0306, q5: 0.0075, q6: 0.0017,
+      q1_cold: 0.0927, q2_cold: 0.0718, q3_cold: 0.0073, q4_cold: 0.0623, q5_cold: 0.0136, q6_cold: 0.0092
     },
     large: {
-      read_turtle: 1.7256, write_turtle: 0.7261, read_ntriples: 1.6059, write_ntriples: 0.368,
-      q1: 0.1806, q2: 0.177, q3: 0.0238, q4: 0.1829
+      read_turtle: 1.7274, write_turtle: 0.6999, read_ntriples: 1.5937, write_ntriples: 0.3396,
+      q1: 0.1599, q2: 0.1784, q3: 0.0239, q4: 0.1824, q5: 0.033, q6: 0.0068,
+      q1_cold: 0.1648, q2_cold: 0.2134, q3_cold: 0.0271, q4_cold: 0.2114, q5_cold: 0.0443, q6_cold: 0.0084
     },
     xlarge: {
-      read_turtle: 18.6239, write_turtle: 6.509, read_ntriples: 19.061, write_ntriples: 3.7787,
-      q1: 1.7034, q2: 2.4214, q3: 0.2782, q4: 2.1923
+      read_turtle: 18.5659, write_turtle: 6.5163, read_ntriples: 18.9341, write_ntriples: 3.6292,
+      q1: 1.8495, q2: 2.4911, q3: 0.2835, q4: 2.2299, q5: 0.3511, q6: 0.0268,
+      q1_cold: 1.8766, q2_cold: 2.6775, q3_cold: 0.2972, q4_cold: 2.2373, q5_cold: 0.3584, q6_cold: 0.0379
     },
   },
   rdf4j: {
     medium: {
-      read_turtle: 0.3807, write_turtle: 0.2804, read_ntriples: 0.1278, write_ntriples: 0.1767,
-      q1: 0.0055, q2: 0.0146, q3: 0.0045, q4: 0.023
+      read_turtle: 0.2103, write_turtle: 0.2557, read_ntriples: 0.1249, write_ntriples: 0.1712,
+      q1: 0.0063, q2: 0.0123, q3: 0.0044, q4: 0.023, q5: 0.0106, q6: 0.0022,
+      q1_cold: 0.0514, q2_cold: 0.0379, q3_cold: 0.0055, q4_cold: 0.029, q5_cold: 0.0159, q6_cold: 0.0095
     },
     large: {
-      read_turtle: 2.3637, write_turtle: 1.8699, read_ntriples: 1.2536, write_ntriples: 1.727,
-      q1: 0.0414, q2: 0.0563, q3: 0.0117, q4: 0.0693
+      read_turtle: 2.5776, write_turtle: 1.7274, read_ntriples: 1.2619, write_ntriples: 1.6102,
+      q1: 0.0599, q2: 0.0617, q3: 0.0107, q4: 0.0814, q5: 0.0189, q6: 0.0049,
+      q1_cold: 0.0672, q2_cold: 0.0684, q3_cold: 0.0127, q4_cold: 0.0826, q5_cold: 0.03, q6_cold: 0.0067
     },
     xlarge: {
-      read_turtle: 24.2002, write_turtle: 19.4223, read_ntriples: 13.4943, write_ntriples: 13.2066,
-      q1: 0.9278, q2: 0.7854, q3: 0.1465, q4: 1.0604
+      read_turtle: 25.4046, write_turtle: 17.5319, read_ntriples: 14.115, write_ntriples: 12.7277,
+      q1: 0.6983, q2: 0.864, q3: 0.1545, q4: 1.1442, q5: 0.2469, q6: 0.0195,
+      q1_cold: 0.7187, q2_cold: 1.0742, q3_cold: 0.1644, q4_cold: 1.1485, q5_cold: 0.2613, q6_cold: 0.0269
     },
   },
   qlever: {
     medium: {
-      read_turtle: 0.74525, write_turtle: null, read_ntriples: 0.49324, write_ntriples: null,
-      q1: 0.00187, q2: 0.00527, q3: 0.01126, q4: 0.00819
+      read_turtle: 0.62559, write_turtle: null, read_ntriples: 0.4662, write_ntriples: null,
+      q1: 0.00284, q2: 0.0074, q3: 0.01384, q4: 0.0083, q5: 0.01425, q6: null,
+      q1_cold: 0.00336, q2_cold: 0.02068, q3_cold: 0.02383, q4_cold: 0.01728, q5_cold: 0.01591, q6_cold: null
     },
     large: {
-      read_turtle: 1.20674, write_turtle: null, read_ntriples: 0.9828, write_ntriples: null,
-      q1: 0.00207, q2: 0.00322, q3: 0.00646, q4: 0.00408
+      read_turtle: 1.17557, write_turtle: null, read_ntriples: 1.00153, write_ntriples: null,
+      q1: 0.00353, q2: 0.00405, q3: 0.00847, q4: 0.00578, q5: 0.05416, q6: null,
+      q1_cold: 0.00432, q2_cold: 0.03389, q3_cold: 0.0226, q4_cold: 0.05088, q5_cold: 0.08159, q6_cold: null
     },
     xlarge: {
-      read_turtle: 7.8188, write_turtle: null, read_ntriples: 7.30028, write_ntriples: null,
-      q1: 0.00165, q2: 0.00184, q3: 0.00441, q4: 0.00225
+      read_turtle: 7.48597, write_turtle: null, read_ntriples: 7.33432, write_ntriples: null,
+      q1: 0.00324, q2: 0.00259, q3: 0.00517, q4: 0.00328, q5: 0.54647, q6: null,
+      q1_cold: 0.00472, q2_cold: 0.15527, q3_cold: 0.07321, q4_cold: 0.29623, q5_cold: 0.60931, q6_cold: null
     },
   },
   virtuoso: {
     medium: {
-      read_turtle: 0.58788, write_turtle: null, read_ntriples: 1.02711, write_ntriples: null,
-      q1: 0.00169, q2: 0.00311, q3: 0.00276, q4: 0.01326
+      read_turtle: 0.64387, write_turtle: null, read_ntriples: 1.02404, write_ntriples: null,
+      q1: 0.00243, q2: 0.00323, q3: 0.00273, q4: 0.01397, q5: 0.02235, q6: null,
+      q1_cold: 0.00294, q2_cold: 0.03414, q3_cold: 0.03092, q4_cold: 0.02262, q5_cold: 0.02559, q6_cold: null
     },
     large: {
-      read_turtle: 1.96575, write_turtle: null, read_ntriples: 6.77033, write_ntriples: null,
-      q1: 0.00673, q2: 0.01903, q3: 0.00712, q4: 0.14172
+      read_turtle: 1.98613, write_turtle: null, read_ntriples: 6.8604, write_ntriples: null,
+      q1: 0.00766, q2: 0.01996, q3: 0.00836, q4: 0.1488, q5: 0.22263, q6: null,
+      q1_cold: 0.00773, q2_cold: 0.10868, q3_cold: 0.08171, q4_cold: 0.16609, q5_cold: 0.24399, q6_cold: null
     },
     xlarge: {
-      read_turtle: 14.97299, write_turtle: null, read_ntriples: 76.18273, write_ntriples: null,
-      q1: 0.04198, q2: 0.03421, q3: 0.13332, q4: 1.983
+      read_turtle: 14.59342, write_turtle: null, read_ntriples: 77.78868, write_ntriples: null,
+      q1: 0.04137, q2: 0.02618, q3: 0.01676, q4: 0.00207, q5: 0.53728, q6: null,
+      q1_cold: 0.042, q2_cold: 0.26515, q3_cold: 0.10528, q4_cold: 0.03186, q5_cold: 0.56922, q6_cold: null
     },
   },
   maplib_disk: {
     medium: {
-      read_turtle: 0.33129, write_turtle: 1.68334, read_ntriples: 0.3264, write_ntriples: 0.08526,
-      q1: 0.06166, q2: 0.00594, q3: 0.01968, q4: 0.01558
+      read_turtle: 0.38236, write_turtle: 1.55892, read_ntriples: 0.30819, write_ntriples: 0.09443,
+      q1: 0.0545, q2: 0.00551, q3: 0.01893, q4: 0.01589, q5: 0.07556, q6: 0.03225,
+      q1_cold: 0.05744, q2_cold: 0.00614, q3_cold: 0.02011, q4_cold: 0.01691, q5_cold: 0.08209, q6_cold: 0.03376
     },
     large: {
-      read_turtle: 1.39173, write_turtle: 13.21545, read_ntriples: 1.37339, write_ntriples: 0.2548,
-      q1: 0.06873, q2: 0.00812, q3: 0.02456, q4: 0.02176
+      read_turtle: 1.30402, write_turtle: 9.8325, read_ntriples: 1.30992, write_ntriples: 0.22405,
+      q1: 0.06627, q2: 0.00799, q3: 0.02341, q4: 0.02018, q5: 0.0922, q6: 0.03731,
+      q1_cold: 0.07148, q2_cold: 0.00828, q3_cold: 0.0255, q4_cold: 0.02309, q5_cold: 0.09567, q6_cold: 0.03864
     },
     xlarge: {
-      read_turtle: 13.09225, write_turtle: 225.87792, read_ntriples: 13.865, write_ntriples: 1.69883,
-      q1: 0.15116, q2: 0.02285, q3: 0.06231, q4: 0.06217
+      read_turtle: 12.8407, write_turtle: 135.35311, read_ntriples: 11.98988, write_ntriples: 1.3623,
+      q1: 0.14171, q2: 0.02245, q3: 0.05864, q4: 0.05776, q5: 0.22529, q6: 0.04068,
+      q1_cold: 0.13571, q2_cold: 0.02399, q3_cold: 0.0671, q4_cold: 0.06199, q5_cold: 0.24117, q6_cold: 0.04281
     },
   },
   graphdb: {
     medium: {
-      read_turtle: 4.41265, write_turtle: null, read_ntriples: 3.61429, write_ntriples: null,
-      q1: 0.02, q2: 0.03376, q3: 0.01138, q4: 0.02906
+      read_turtle: 4.25319, write_turtle: null, read_ntriples: 3.61516, write_ntriples: null,
+      q1: 0.02012, q2: 0.0337, q3: 0.00982, q4: 0.02669, q5: 0.04617, q6: 0.01717,
+      q1_cold: 0.03335, q2_cold: 0.0864, q3_cold: 0.02241, q4_cold: 0.04145, q5_cold: 0.08378, q6_cold: 0.04874
     },
     large: {
-      read_turtle: 7.62188, write_turtle: null, read_ntriples: 7.61993, write_ntriples: null,
-      q1: 0.15357, q2: 0.2174, q3: 0.0454, q4: 0.23919
+      read_turtle: 7.6936, write_turtle: null, read_ntriples: 6.62626, write_ntriples: null,
+      q1: 0.13596, q2: 0.20317, q3: 0.04392, q4: 0.2246, q5: 0.39309, q6: 0.04291,
+      q1_cold: 0.1379, q2_cold: 0.23682, q3_cold: 0.05036, q4_cold: 0.24083, q5_cold: 0.46701, q6_cold: 0.05503
     },
     xlarge: {
-      read_turtle: 58.99127, write_turtle: null, read_ntriples: 54.08922, write_ntriples: null,
-      q1: 1.50624, q2: 2.93261, q3: 0.60613, q4: 3.29802
+      read_turtle: 57.10155, write_turtle: null, read_ntriples: 54.21408, write_ntriples: null,
+      q1: 1.41396, q2: 2.85927, q3: 0.61569, q4: 3.65596, q5: 4.37698, q6: 0.17386,
+      q1_cold: 1.45804, q2_cold: 2.91928, q3_cold: 0.61779, q4_cold: 4.08174, q5_cold: 4.71662, q6_cold: 0.17299
     },
   },
   dotnetrdf: {
     medium: {
-      read_turtle: 1.52011, write_turtle: 0.2939, read_ntriples: 0.89654, write_ntriples: 0.41249,
-      q1: 0.06747, q2: 0.08371, q3: 0.03398, q4: 0.08948
+      read_turtle: 1.47465, write_turtle: 0.28178, read_ntriples: 0.80487, write_ntriples: 0.42283,
+      q1: 0.07563, q2: 0.07682, q3: 0.03449, q4: 0.07828, q5: 0.02074, q6: 0.00401,
+      q1_cold: 0.14284, q2_cold: 0.11485, q3_cold: 0.03555, q4_cold: 0.09411, q5_cold: 0.02334, q6_cold: 0.02106
     },
     large: {
-      read_turtle: 9.68858, write_turtle: 2.4011, read_ntriples: 8.78135, write_ntriples: 1.80872,
-      q1: 0.61731, q2: 0.77979, q3: 0.42213, q4: 0.89811
+      read_turtle: 9.03717, write_turtle: 2.27061, read_ntriples: 8.61601, write_ntriples: 1.72106,
+      q1: 0.61071, q2: 0.75002, q3: 0.41932, q4: 0.83374, q5: 0.3228, q6: 0.07,
+      q1_cold: 0.66662, q2_cold: 0.74372, q3_cold: 0.42183, q4_cold: 0.83088, q5_cold: 0.3501, q6_cold: 0.08456
     },
     xlarge: {
       read_turtle: null, write_turtle: null, read_ntriples: null, write_ntriples: null,
-      q1: null, q2: null, q3: null, q4: null
+      q1: null, q2: null, q3: null, q4: null, q5: null, q6: null,
+      q1_cold: null, q2_cold: null, q3_cold: null, q4_cold: null, q5_cold: null, q6_cold: null
     },
   },
   neo4j: {
     medium: {
-      read_turtle: 1.2429, write_turtle: null, read_ntriples: 0.51695, write_ntriples: null,
-      q1: 0.00417, q2: 0.02116, q3: 0.00727, q4: 0.00421
+      read_turtle: 1.27474, write_turtle: null, read_ntriples: 0.52952, write_ntriples: null,
+      q1: 0.00414, q2: 0.01878, q3: 0.00715, q4: 0.00509, q5: null, q6: null,
+      q1_cold: 0.0205, q2_cold: 0.14624, q3_cold: 0.09389, q4_cold: 0.06415, q5_cold: null, q6_cold: null
     },
     large: {
-      read_turtle: 6.69406, write_turtle: null, read_ntriples: 5.27146, write_ntriples: null,
-      q1: 0.00378, q2: 0.083, q3: 0.03015, q4: 0.00605
+      read_turtle: 6.63697, write_turtle: null, read_ntriples: 5.38454, write_ntriples: null,
+      q1: 0.00459, q2: 0.0796, q3: 0.03157, q4: 0.00635, q5: null, q6: null,
+      q1_cold: 0.02791, q2_cold: 0.27629, q3_cold: 0.13027, q4_cold: 0.08075, q5_cold: null, q6_cold: null
     },
     xlarge: {
-      read_turtle: 65.77856, write_turtle: null, read_ntriples: 51.22257, write_ntriples: null,
-      q1: 0.00352, q2: 0.85444, q3: 0.28101, q4: 0.00948
+      read_turtle: 67.07065, write_turtle: null, read_ntriples: 52.18607, write_ntriples: null,
+      q1: 0.00533, q2: 0.83997, q3: 0.27838, q4: 0.0108, q5: null, q6: null,
+      q1_cold: 0.03315, q2_cold: 1.07162, q3_cold: 0.39504, q4_cold: 0.1129, q5_cold: null, q6_cold: null
     },
   },
 };
@@ -1040,12 +1145,14 @@ function buildIOCharts(scale, log) {
 // ── Build Query charts (filtered) ──
 function buildQueryCharts(scale, log) {
   const fws = activeFW();
-  ['q1', 'q2', 'q3', 'q4'].forEach(q => {
+  const ops = coldMode ? Q_COLD_OPS : Q_OPS;
+  Q_OPS.forEach((q, i) => {
+    const dataKey = ops[i];
     const chartId = `chart-${q}`;
     if (queryCharts[q]) queryCharts[q].destroy();
 
     const datasets = fws.map(fw => {
-      const v = DATA[fw]?.[scale]?.[q];
+      const v = DATA[fw]?.[scale]?.[dataKey];
       return {
         label: FW_LABELS[fw],
         data: [v !== null && v !== undefined ? v * 1000 : null],
@@ -1077,10 +1184,11 @@ function buildScaleCharts() {
   if (scaleCharts.read) scaleCharts.read.destroy();
   scaleCharts.read = makeLineChart('chart-scale-read', labels, readDatasets);
 
+  const q2Key = coldMode ? 'q2_cold' : 'q2';
   const q2Datasets = fws.map(fw => ({
     label: FW_LABELS[fw],
     data: scales.map(s => {
-      const v = DATA[fw]?.[s]?.q2;
+      const v = DATA[fw]?.[s]?.[q2Key];
       return v !== null && v !== undefined ? v * 1000 : null;
     }),
     borderColor: FW_COLORS[fw],
@@ -1089,13 +1197,30 @@ function buildScaleCharts() {
   }));
   if (scaleCharts.q2) scaleCharts.q2.destroy();
   scaleCharts.q2 = makeLineChart('chart-scale-q2', labels, q2Datasets);
+
+  const q5Key = coldMode ? 'q5_cold' : 'q5';
+  const q5Datasets = fws.map(fw => ({
+    label: FW_LABELS[fw],
+    data: scales.map(s => {
+      const v = DATA[fw]?.[s]?.[q5Key];
+      return v !== null && v !== undefined ? v * 1000 : null;
+    }),
+    borderColor: FW_COLORS[fw],
+    backgroundColor: FW_COLORS[fw] + '33',
+    pointRadius: 5, pointHoverRadius: 7, tension: 0.3, spanGaps: false,
+  }));
+  if (scaleCharts.q5) scaleCharts.q5.destroy();
+  scaleCharts.q5 = makeLineChart('chart-scale-q5', labels, q5Datasets);
 }
 
 // ── Tables (filtered) ──
 const IO_OPS = ['read_turtle', 'write_turtle', 'read_ntriples', 'write_ntriples'];
 const IO_LABELS = { read_turtle: 'Read Turtle', write_turtle: 'Write Turtle', read_ntriples: 'Read N-Triples', write_ntriples: 'Write N-Triples' };
-const Q_OPS = ['q1', 'q2', 'q3', 'q4'];
-const Q_LABELS = { q1: 'Q1: COUNT all triples', q2: 'Q2: GROUP BY + SUM', q3: 'Q3: 3-entity join + filter', q4: 'Q4: OPTIONAL + GROUP BY' };
+const Q_OPS = ['q1', 'q2', 'q3', 'q4', 'q5', 'q6'];
+const Q_COLD_OPS = ['q1_cold', 'q2_cold', 'q3_cold', 'q4_cold', 'q5_cold', 'q6_cold'];
+const Q_LABELS = { q1: 'Q1: COUNT all triples', q2: 'Q2: GROUP BY + SUM', q3: 'Q3: 3-entity join + filter', q4: 'Q4: OPTIONAL + GROUP BY', q5: 'Q5: CONSTRUCT subgraph', q6: 'Q6: DELETE-INSERT prices' };
+const Q_COLD_LABELS = { q1_cold: 'Q1: COUNT all triples', q2_cold: 'Q2: GROUP BY + SUM', q3_cold: 'Q3: 3-entity join + filter', q4_cold: 'Q4: OPTIONAL + GROUP BY', q5_cold: 'Q5: CONSTRUCT subgraph', q6_cold: 'Q6: DELETE-INSERT prices' };
+let coldMode = true;
 
 function buildTable(tableId, ops, opLabels, scale) {
   const fws = activeFW();
@@ -1137,7 +1262,9 @@ function switchQuery(scale) {
   document.querySelectorAll('#query-tabs .scale-tab').forEach(t => t.classList.remove('active'));
   event.target.classList.add('active');
   buildQueryCharts(scale, queryLogScale);
-  buildTable('query-table', Q_OPS, Q_LABELS, scale);
+  const ops = coldMode ? Q_COLD_OPS : Q_OPS;
+  const labels = coldMode ? Q_COLD_LABELS : Q_LABELS;
+  buildTable('query-table', ops, labels, scale);
 }
 
 function toggleIOLog() {
@@ -1150,6 +1277,15 @@ function toggleQueryLog() {
   queryLogScale = !queryLogScale;
   document.getElementById('query-log-toggle').classList.toggle('active', queryLogScale);
   buildQueryCharts(currentQueryScale, queryLogScale);
+}
+
+function toggleCold() {
+  coldMode = !coldMode;
+  document.getElementById('cold-toggle').classList.toggle('active', !coldMode);
+  buildQueryCharts(currentQueryScale, queryLogScale);
+  const ops = coldMode ? Q_COLD_OPS : Q_OPS;
+  const labels = coldMode ? Q_COLD_LABELS : Q_LABELS;
+  buildTable('query-table', ops, labels, currentQueryScale);
 }
 
 // ── Expandable SPARQL rows ──
@@ -1165,7 +1301,7 @@ buildFilter('global-filter', 'global');
 buildIOCharts('medium', false);
 buildQueryCharts('medium', false);
 buildTable('io-table', IO_OPS, IO_LABELS, 'medium');
-buildTable('query-table', Q_OPS, Q_LABELS, 'medium');
+buildTable('query-table', coldMode ? Q_COLD_OPS : Q_OPS, coldMode ? Q_COLD_LABELS : Q_LABELS, 'medium');
 buildScaleCharts();
 </script>
 

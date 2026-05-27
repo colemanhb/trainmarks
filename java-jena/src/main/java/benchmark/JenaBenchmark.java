@@ -7,6 +7,9 @@ import org.apache.jena.rdf.model.Model;
 import org.apache.jena.rdf.model.ModelFactory;
 import org.apache.jena.riot.Lang;
 import org.apache.jena.riot.RDFDataMgr;
+import org.apache.jena.update.UpdateAction;
+import org.apache.jena.update.UpdateFactory;
+import org.apache.jena.update.UpdateRequest;
 
 import java.io.*;
 import java.nio.file.*;
@@ -90,31 +93,64 @@ public class JenaBenchmark {
 
         // --- SPARQL Queries ---
         System.out.println("\n  SPARQL queries (" + scale + "):");
-        for (String qname : new String[]{"q1_count", "q2_customer_orders", "q3_join_3_entities", "q4_optional_aggregation"}) {
+        for (String qname : new String[]{"q1_count", "q2_customer_orders", "q3_join_3_entities", "q4_optional_aggregation", "q5_construct", "q6_delete_insert"}) {
             String sparql = Files.readString(Path.of(queryDir + "/" + qname + ".rq"));
+            boolean isUpdate = isUpdateQuery(sparql);
 
-            // Warmup
-            execQuery(model, sparql);
+            // Warmup (also recorded as cold timing)
+            t0 = System.nanoTime();
+            if (isUpdate) {
+                execUpdate(model, sparql);
+            } else {
+                execQuery(model, sparql);
+            }
+            double coldTime = (System.nanoTime() - t0) / 1e9;
+            addResult("jena", scale, "query_" + qname + "_cold", coldTime);
 
             // Best of 3
             double best = Double.MAX_VALUE;
             for (int i = 0; i < 3; i++) {
                 t0 = System.nanoTime();
-                execQuery(model, sparql);
+                if (isUpdate) {
+                    execUpdate(model, sparql);
+                } else {
+                    execQuery(model, sparql);
+                }
                 double elapsed = (System.nanoTime() - t0) / 1e9;
                 best = Math.min(best, elapsed);
             }
-            System.out.printf("    %s: %.4fs (best of 3)%n", qname, best);
+            System.out.printf("    %s: %.4fs (best of 3), cold: %.4fs%n", qname, best, coldTime);
             addResult("jena", scale, "query_" + qname, best);
         }
 
         model.close();
     }
 
+    static boolean isUpdateQuery(String sparql) {
+        for (String line : sparql.split("\n")) {
+            String trimmed = line.trim().toUpperCase();
+            if (trimmed.startsWith("PREFIX") || trimmed.isEmpty()) continue;
+            return trimmed.startsWith("DELETE") || trimmed.startsWith("INSERT");
+        }
+        return false;
+    }
+
+    static void execUpdate(Model model, String sparql) {
+        UpdateRequest request = UpdateFactory.create(sparql);
+        UpdateAction.execute(request, model);
+    }
+
     static void execQuery(Model model, String sparql) {
-        try (QueryExecution qe = QueryExecutionFactory.create(sparql, model)) {
-            ResultSet rs = qe.execSelect();
-            while (rs.hasNext()) rs.next(); // consume results
+        Query query = QueryFactory.create(sparql);
+        try (QueryExecution qe = QueryExecutionFactory.create(query, model)) {
+            if (query.isConstructType()) {
+                Model result = qe.execConstruct();
+                result.size(); // force materialization
+                result.close();
+            } else {
+                ResultSet rs = qe.execSelect();
+                while (rs.hasNext()) rs.next(); // consume results
+            }
         }
     }
 

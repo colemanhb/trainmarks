@@ -425,16 +425,28 @@ def bench_io(scale):
 
     record("write_ntriples", scale, None)
 
+    # --- Q5, Q6 (CONSTRUCT) are N/A for Neo4j ---
+    record("query_q5_construct", scale, None)
+    record("query_q5_construct_cold", scale, None)
+    print(f"  query_q5_construct: N/A (CONSTRUCT not supported in Cypher)")
+    record("query_q6_delete_insert", scale, None)
+    record("query_q6_delete_insert_cold", scale, None)
+    print(f"  query_q6_delete_insert: N/A (SPARQL Update not supported in Cypher)")
+
     # --- Cypher Queries (on N-Triples data if available) ---
     if valid_nt:
         print(f"\n  Cypher queries ({scale}):")
         for qname, cypher_text in CYPHER_QUERIES.items():
-            # Warmup
+            # Warmup (also recorded as cold timing)
             try:
+                t0_cold = time.perf_counter()
                 cypher(cypher_text, timeout=60)
+                t_cold = time.perf_counter() - t0_cold
+                record(f"query_{qname}_cold", scale, t_cold)
             except Exception as e:
                 print(f"    {qname}: warmup failed — {e}")
                 record(f"query_{qname}", scale, None)
+                record(f"query_{qname}_cold", scale, None)
                 continue
 
             # Best of 3
@@ -457,6 +469,7 @@ def bench_io(scale):
         print(f"\n  Skipping queries ({scale}) — no valid data loaded")
         for qname in CYPHER_QUERIES:
             record(f"query_{qname}", scale, None)
+            record(f"query_{qname}_cold", scale, None)
 
     return True
 

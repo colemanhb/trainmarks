@@ -188,6 +188,52 @@ GROUP BY ?country ?segment
 ORDER BY DESC(?revenue)
 """
 
+    queries["q5_construct"] = """
+PREFIX : <http://benchmark.example/>
+PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+
+CONSTRUCT {
+    ?customer rdf:type :Customer .
+    ?customer rdfs:label ?name .
+    ?customer :country :Norway .
+    ?order :placedBy ?customer .
+    ?order :totalAmount ?amount .
+    ?order :contains ?product .
+    ?product rdfs:label ?productName .
+}
+WHERE {
+    ?customer rdf:type :Customer ;
+              rdfs:label ?name ;
+              :country :Norway .
+    ?order :placedBy ?customer ;
+           :totalAmount ?amount ;
+           :contains ?product .
+    ?product rdfs:label ?productName .
+}
+"""
+
+    queries["q6_delete_insert"] = """
+PREFIX : <http://benchmark.example/>
+PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+
+DELETE { ?product :unitPrice ?oldPrice }
+INSERT { ?product :unitPrice ?newPrice }
+WHERE {
+    ?product a :Product ;
+             :unitPrice ?oldPrice ;
+             :category ?cat .
+    BIND(
+        IF(?cat = "Software", ?oldPrice * 1.10,
+        IF(?cat = "Hardware", ?oldPrice * 0.95,
+        IF(?cat = "Services", ?oldPrice * 1.15,
+        IF(?cat = "Accessories", ?oldPrice * 0.90,
+        ?oldPrice * 1.05))))
+        AS ?newPrice
+    )
+}
+"""
+
     return queries
 
 

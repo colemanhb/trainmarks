@@ -26,6 +26,14 @@ OP_MAP = {
     "query_q2_customer_orders": "q2",
     "query_q3_join_3_entities": "q3",
     "query_q4_optional_aggregation": "q4",
+    "query_q5_construct": "q5",
+    "query_q6_delete_insert": "q6",
+    "query_q1_count_cold": "q1_cold",
+    "query_q2_customer_orders_cold": "q2_cold",
+    "query_q3_join_3_entities_cold": "q3_cold",
+    "query_q4_optional_aggregation_cold": "q4_cold",
+    "query_q5_construct_cold": "q5_cold",
+    "query_q6_delete_insert_cold": "q6_cold",
 }
 
 # Frameworks to include (skip kolibrie)
@@ -36,7 +44,7 @@ FRAMEWORKS = [
 ]
 
 SCALES = ["medium", "large", "xlarge"]
-OPS = ["read_turtle", "write_turtle", "read_ntriples", "write_ntriples", "q1", "q2", "q3", "q4"]
+OPS = ["read_turtle", "write_turtle", "read_ntriples", "write_ntriples", "q1", "q2", "q3", "q4", "q5", "q6", "q1_cold", "q2_cold", "q3_cold", "q4_cold", "q5_cold", "q6_cold"]
 
 
 def load_results():
@@ -93,10 +101,12 @@ def build_data_block(data):
                 vals = data[fw][scale]
 
             io_parts = [f"{op}: {format_value(vals.get(op))}" for op in OPS[:4]]
-            q_parts = [f"{op}: {format_value(vals.get(op))}" for op in OPS[4:]]
+            q_parts = [f"{op}: {format_value(vals.get(op))}" for op in OPS[4:10]]
+            cold_parts = [f"{op}: {format_value(vals.get(op))}" for op in OPS[10:]]
             lines.append(f"    {scale}: {{")
             lines.append(f"      {', '.join(io_parts)},")
-            lines.append(f"      {', '.join(q_parts)}")
+            lines.append(f"      {', '.join(q_parts)},")
+            lines.append(f"      {', '.join(cold_parts)}")
             lines.append(f"    }},")
         lines.append(f"  }},")
 

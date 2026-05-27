@@ -108,18 +108,29 @@ def bench_queries(g, scale):
         return
     print(f"\n  SPARQL queries ({scale}):")
 
-    for qname in ["q1_count", "q2_customer_orders", "q3_join_3_entities", "q4_optional_aggregation"]:
+    for qname in ["q1_count", "q2_customer_orders", "q3_join_3_entities", "q4_optional_aggregation", "q5_construct", "q6_delete_insert"]:
         q = load_query(qname)
-        # Warmup run
-        _, t_warmup = timed(f"  {qname} (warmup)", lambda: list(g.query(q)), warmup=True)
+        is_update = any(line.strip().upper().startswith("DELETE") or line.strip().upper().startswith("INSERT")
+                        for line in q.split("\n") if not line.strip().upper().startswith("PREFIX"))
+
+        def run_q(query=q, update=is_update):
+            if update:
+                return g.update(query)
+            else:
+                return list(g.query(query))
+
+        # Warmup run (also recorded as cold timing)
+        _, t_warmup = timed(f"  {qname} (warmup)", run_q, warmup=True)
         if t_warmup is None:
             print(f"    {qname}: TIMEOUT")
             RESULTS.append({"framework": "rdflib", "scale": scale, "operation": f"query_{qname}", "seconds": "TIMEOUT"})
+            RESULTS.append({"framework": "rdflib", "scale": scale, "operation": f"query_{qname}_cold", "seconds": "TIMEOUT"})
             continue
+        RESULTS.append({"framework": "rdflib", "scale": scale, "operation": f"query_{qname}_cold", "seconds": t_warmup})
         # Timed run (best of 3)
         times = []
         for _ in range(3):
-            _, t = timed(f"  {qname}", lambda: list(g.query(q)), warmup=True)
+            _, t = timed(f"  {qname}", run_q, warmup=True)
             if t is not None:
                 times.append(t)
         if times:

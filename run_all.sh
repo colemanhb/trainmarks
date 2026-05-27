@@ -25,24 +25,24 @@ echo "=== RDF Benchmark Suite ==="
 echo "Root: $ROOT"
 
 # Python frameworks
-run_bench "1/11" "maplib" \
-    "cd '$ROOT/python-maplib' && python bench_maplib.py"
+run_bench "1/13" "maplib" \
+    "cd '$ROOT/python-maplib' && python3 bench_maplib.py"
 
-run_bench "2/11" "maplib (disk)" \
-    "cd '$ROOT/python-maplib-disk' && python bench_maplib_disk.py"
+run_bench "2/13" "maplib (disk)" \
+    "cd '$ROOT/python-maplib-disk' && python3 bench_maplib_disk.py"
 
-run_bench "3/11" "oxigraph" \
-    "cd '$ROOT/python-oxigraph' && python bench_oxigraph.py"
+run_bench "3/13" "oxigraph" \
+    "cd '$ROOT/python-oxigraph' && python3 bench_oxigraph.py"
 
-run_bench "4/11" "rdflib (slow)" \
-    "cd '$ROOT/python-rdflib' && python bench_rdflib.py"
+run_bench "4/13" "rdflib (slow)" \
+    "cd '$ROOT/python-rdflib' && python3 bench_rdflib.py"
 
 # Java frameworks
 if command -v mvn &> /dev/null; then
-    run_bench "5/11" "Apache Jena" \
+    run_bench "5/13" "Apache Jena" \
         "cd '$ROOT/java-jena' && mvn package -q -DskipTests 2>/dev/null && java -jar target/jena-benchmark-1.0-SNAPSHOT.jar ../data ../queries ../results"
 
-    run_bench "6/11" "Eclipse RDF4J" \
+    run_bench "6/13" "Eclipse RDF4J" \
         "cd '$ROOT/java-rdf4j' && mvn package -q -DskipTests 2>/dev/null && java -jar target/rdf4j-benchmark-1.0-SNAPSHOT.jar ../data ../queries ../results"
 else
     SKIPPED="$SKIPPED  - Jena, RDF4J (mvn not found)\n"
@@ -50,22 +50,33 @@ fi
 
 # Docker frameworks
 if command -v docker &> /dev/null; then
-    run_bench "7/11" "QLever (Docker)" \
-        "cd '$ROOT/qlever' && python bench_qlever.py"
+    run_bench "7/13" "QLever (Docker)" \
+        "cd '$ROOT/qlever' && python3 bench_qlever.py"
 
-    run_bench "8/11" "Virtuoso (Docker)" \
-        "cd '$ROOT/virtuoso' && python bench_virtuoso.py"
+    run_bench "8/13" "Virtuoso (Docker)" \
+        "cd '$ROOT/virtuoso' && python3 bench_virtuoso.py"
 
-    run_bench "9/11" "GraphDB (Docker)" \
-        "cd '$ROOT/graphdb' && python bench_graphdb.py"
+    run_bench "9/13" "GraphDB (Docker)" \
+        "cd '$ROOT/graphdb' && python3 bench_graphdb.py"
 
-    run_bench "10/11" "dotNetRDF (Docker)" \
-        "cd '$ROOT/dotnetrdf' && python bench_dotnetrdf.py"
+    run_bench "10/13" "dotNetRDF (Docker)" \
+        "cd '$ROOT/dotnetrdf' && python3 bench_dotnetrdf.py"
 
-    run_bench "11/11" "Neo4j + n10s (Docker)" \
-        "cd '$ROOT/neo4j' && python bench_neo4j.py"
+    run_bench "11/13" "Neo4j + n10s (Docker)" \
+        "cd '$ROOT/neo4j' && python3 bench_neo4j.py"
+
+    run_bench "12/13" "Blazegraph (Docker)" \
+        "cd '$ROOT/blazegraph' && python3 bench_blazegraph.py"
 else
-    SKIPPED="$SKIPPED  - QLever, Virtuoso, GraphDB, dotNetRDF, Neo4j (docker not found)\n"
+    SKIPPED="$SKIPPED  - QLever, Virtuoso, GraphDB, dotNetRDF, Neo4j, Blazegraph (docker not found)\n"
+fi
+
+# Node.js frameworks
+if command -v node &> /dev/null; then
+    run_bench "13/13" "Comunica (Node.js)" \
+        "cd '$ROOT/comunica' && python3 bench_comunica.py"
+else
+    SKIPPED="$SKIPPED  - Comunica (node not found)\n"
 fi
 
 # Summary
